@@ -46,10 +46,17 @@ gitpushall() {
     for dir in ~/git/*/; do
         if [ -d "$dir/.git" ]; then
             echo -e "\033[36m==> $(basename "$dir")\033[0m"
-            git -C "$dir" commit --allow-empty -m "empty commit" && git -C "$dir" push
+            if [ -n "$(git -C "$dir" status --porcelain)" ]; then
+                git -C "$dir" add -A
+                git -C "$dir" commit -m "sync $(date +%Y-%m-%d)"
+                git -C "$dir" push || echo -e "\033[31m   push failed\033[0m"
+            else
+                echo -e "\033[90m   clean — nothing to commit\033[0m"
+            fi
         fi
     done
 }
+
 
 # One-line status for every repo under ~/git
 gitstatall() {
