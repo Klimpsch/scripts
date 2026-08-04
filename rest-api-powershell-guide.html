@@ -462,6 +462,8 @@
       <li><a href="#calling">Calling APIs in 5.1</a></li>
       <li><a href="#testing">Testing &amp; troubleshooting</a></li>
       <li><a href="#practices">Best practices</a></li>
+      <li><a href="#patterns">Advanced patterns</a></li>
+      <li><a href="#client">Build one robust client</a></li>
       <li><a href="#proscons">Pros &amp; cons of 5.1</a></li>
       <li><a href="#idrac">Example: Dell iDRAC / Redfish</a></li>
       <li><a href="#esxi">Example: VMware ESXi / vSphere</a></li>
@@ -871,8 +873,251 @@ curl.exe -k -i -u admin:calvin `
   </section>
 
   <!-- ============ 5 ============ -->
+  <section id="patterns">
+    <div class="section-head"><span class="num">05</span><h2>Advanced patterns</h2></div>
+
+    <p>The basics get you a working call. These patterns get you a client that survives real APIs — ones that expire tokens, throttle you, paginate everything, and answer with a status code you have to <em>interpret</em> rather than just succeed or fail on.</p>
+
+    <h3>OAuth2 with token refresh</h3>
+    <p>Many modern APIs issue a short-lived <strong>access token</strong> (often 5–60 minutes) plus a long-lived <strong>refresh token</strong>. Rather than re-sending your password, you exchange the refresh token for a new access token when the old one expires. The robust approach: store the expiry, and refresh <em>before</em> a call if the token is stale or about to be.</p>
+
+    <div class="code">
+      <div class="code-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="label">oauth2-refresh.ps1</span><span class="lang">powershell</span></div>
+<pre><span class="c"># ---- Initial token grant (client credentials or password grant) ----</span>
+<span class="v">$tokenUri</span> = <span class="s">"https://auth.example.com/oauth2/token"</span>
+
+<span class="v">$grant</span> = <span class="cmd">Invoke-RestMethod</span> <span class="k">-Uri</span> <span class="v">$tokenUri</span> <span class="k">-Method</span> Post <span class="k">-Body</span> @{
+    grant_type    = <span class="s">"client_credentials"</span>
+    client_id     = <span class="v">$clientId</span>
+    client_secret = <span class="v">$clientSecret</span>
+    scope         = <span class="s">"api.read api.write"</span>
+}   <span class="c"># form-encoded body — pass a hashtable, NOT ConvertTo-Json, for OAuth token calls</span>
+
+<span class="c"># Track the token AND when it dies. expires_in is seconds from now.</span>
+<span class="v">$script:token</span>       = <span class="v">$grant</span>.access_token
+<span class="v">$script:refresh</span>     = <span class="v">$grant</span>.refresh_token
+<span class="v">$script:tokenExpiry</span> = (<span class="cmd">Get-Date</span>).AddSeconds(<span class="v">$grant</span>.expires_in)
+
+<span class="k">function</span> <span class="cmd">Get-ValidToken</span> {
+    <span class="c"># Refresh 60 s early to avoid a race where the token dies mid-call</span>
+    <span class="k">if</span> ((<span class="cmd">Get-Date</span>) <span class="k">-ge</span> <span class="v">$script:tokenExpiry</span>.AddSeconds(-60)) {
+        <span class="cmd">Write-Verbose</span> <span class="s">"Access token stale — refreshing"</span>
+        <span class="v">$new</span> = <span class="cmd">Invoke-RestMethod</span> <span class="k">-Uri</span> <span class="v">$tokenUri</span> <span class="k">-Method</span> Post <span class="k">-Body</span> @{
+            grant_type    = <span class="s">"refresh_token"</span>
+            refresh_token = <span class="v">$script:refresh</span>
+            client_id     = <span class="v">$clientId</span>
+            client_secret = <span class="v">$clientSecret</span>
+        }
+        <span class="v">$script:token</span>       = <span class="v">$new</span>.access_token
+        <span class="v">$script:tokenExpiry</span> = (<span class="cmd">Get-Date</span>).AddSeconds(<span class="v">$new</span>.expires_in)
+        <span class="c"># Some providers rotate the refresh token too — capture it if present</span>
+        <span class="k">if</span> (<span class="v">$new</span>.refresh_token) { <span class="v">$script:refresh</span> = <span class="v">$new</span>.refresh_token }
+    }
+    <span class="k">return</span> <span class="v">$script:token</span>
+}
+
+<span class="c"># Every call fetches a guaranteed-valid token first</span>
+<span class="v">$auth</span> = @{ Authorization = <span class="s">"Bearer $(Get-ValidToken)"</span> }
+<span class="v">$data</span> = <span class="cmd">Invoke-RestMethod</span> <span class="k">-Uri</span> <span class="s">"https://api.example.com/v1/things"</span> <span class="k">-Headers</span> <span class="v">$auth</span></pre>
+    </div>
+    <div class="callout v51"><span class="ico">5.1</span><div>OAuth token endpoints expect a <strong>form-encoded</strong> body (<code class="inl">application/x-www-form-urlencoded</code>), not JSON. In PowerShell 5.1, passing a plain hashtable to <code class="inl">-Body</code> form-encodes it automatically — so do <em>not</em> pipe it through <code class="inl">ConvertTo-Json</code> for the token grant. JSON is only for the API calls that follow.</div></div>
+
+    <h3>Session reuse</h3>
+    <p>Refreshing a token or re-authenticating on every call is wasteful and, on hardware like iDRAC, can exhaust the session pool. Authenticate <strong>once</strong>, cache the token/session in a variable, and reuse it for the life of the run. Two reuse styles:</p>
+
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Style</th><th>How</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Header reuse</strong></td><td>Store the token/session-id and pass the same <code>-Headers</code> hashtable to every call</td><td>Token &amp; session APIs (iDRAC, vSphere, OAuth)</td></tr>
+          <tr><td><strong>WebSession object</strong></td><td>Capture cookies with <code>-SessionVariable</code>, then pass <code>-WebSession</code> so auth cookies + connection settings persist</td><td>Cookie-based auth, keeping TCP connections warm</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="code">
+      <div class="code-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="label">websession-reuse.ps1</span><span class="lang">powershell</span></div>
+<pre><span class="c"># First call creates a session object bound to $sv (note: no $ in -SessionVariable)</span>
+<span class="cmd">Invoke-RestMethod</span> <span class="k">-Uri</span> <span class="s">"https://api.example.com/login"</span> <span class="k">-Method</span> Post `
+    <span class="k">-Body</span> <span class="v">$loginBody</span> <span class="k">-ContentType</span> <span class="s">"application/json"</span> <span class="k">-SessionVariable</span> sv | <span class="cmd">Out-Null</span>
+
+<span class="c"># Every later call reuses cookies, headers, and the warm connection via $sv</span>
+<span class="v">$profile</span> = <span class="cmd">Invoke-RestMethod</span> <span class="k">-Uri</span> <span class="s">"https://api.example.com/me"</span>    <span class="k">-WebSession</span> <span class="v">$sv</span>
+<span class="v">$orders</span>  = <span class="cmd">Invoke-RestMethod</span> <span class="k">-Uri</span> <span class="s">"https://api.example.com/orders"</span> <span class="k">-WebSession</span> <span class="v">$sv</span></pre>
+    </div>
+    <div class="callout tip"><span class="ico">→</span><div>Reusing a <code class="inl">WebSession</code> also reuses the underlying TCP/TLS connection, which noticeably speeds up loops of many calls to the same host — you pay the TLS handshake once instead of per request.</div></div>
+
+    <h3>Retry-After &amp; exponential backoff</h3>
+    <p>The retry wrapper in §4 backs off on its own schedule. A well-behaved client should first honor the server's <code class="inl">Retry-After</code> header when present (seconds, or an HTTP date), and only fall back to exponential backoff otherwise.</p>
+
+    <div class="code">
+      <div class="code-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="label">retry-after-aware.ps1</span><span class="lang">powershell</span></div>
+<pre><span class="k">function</span> <span class="cmd">Get-RetryDelay</span> {
+    <span class="k">param</span>(<span class="v">$Exception</span>, [int]<span class="v">$Attempt</span>)
+
+    <span class="c"># 1) Prefer the server's Retry-After header if it sent one</span>
+    <span class="v">$retryAfter</span> = <span class="v">$Exception</span>.Response.Headers[<span class="s">"Retry-After"</span>]
+    <span class="k">if</span> (<span class="v">$retryAfter</span>) {
+        <span class="c"># Header may be seconds ("30") or an HTTP date</span>
+        <span class="k">if</span> (<span class="v">$retryAfter</span> <span class="k">-match</span> <span class="s">'^\d+$'</span>) {
+            <span class="k">return</span> [int]<span class="v">$retryAfter</span>
+        }
+        <span class="v">$when</span> = [datetime]<span class="v">$retryAfter</span>
+        <span class="k">return</span> [math]::Max(1, (<span class="v">$when</span> - (<span class="cmd">Get-Date</span>)).TotalSeconds)
+    }
+
+    <span class="c"># 2) Otherwise exponential backoff with jitter (avoid thundering herd)</span>
+    <span class="v">$base</span>   = [math]::Pow(2, <span class="v">$Attempt</span>)          <span class="c"># 2,4,8,16...</span>
+    <span class="v">$jitter</span> = <span class="cmd">Get-Random</span> <span class="k">-Minimum</span> 0 <span class="k">-Maximum</span> 1000   <span class="c"># ms</span>
+    <span class="k">return</span> <span class="v">$base</span> + (<span class="v">$jitter</span> / 1000)
+}</pre>
+    </div>
+
+    <h3>Status-code branching</h3>
+    <p>"Did it throw?" is too blunt. A robust client branches on the actual code: some 4xx are permanent (don't retry), <code class="inl">401</code> means refresh-and-retry-once, <code class="inl">429</code> and <code class="inl">5xx</code> mean back off and retry, and <code class="inl">404</code> may be a legitimate "not found" your caller should handle rather than an error.</p>
+
+    <div class="code">
+      <div class="code-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="label">status-branching.ps1</span><span class="lang">powershell</span></div>
+<pre><span class="k">catch</span> {
+    <span class="v">$code</span> = <span class="v">$_</span>.Exception.Response.StatusCode.value__
+
+    <span class="k">switch</span> (<span class="v">$code</span>) {
+        401 {
+            <span class="c"># Token expired — refresh once and let the caller retry</span>
+            <span class="cmd">Write-Verbose</span> <span class="s">"401 — token expired, refreshing"</span>
+            Get-ValidToken | <span class="cmd">Out-Null</span>
+            <span class="v">$shouldRetry</span> = <span class="k">$true</span>
+        }
+        403 { <span class="k">throw</span> <span class="s">"403 Forbidden — permissions issue, will not retry"</span> }
+        404 {
+            <span class="c"># Not an error for us — return null so caller decides</span>
+            <span class="cmd">Write-Verbose</span> <span class="s">"404 — resource not found"</span>
+            <span class="k">return</span> <span class="k">$null</span>
+        }
+        429     { <span class="v">$shouldRetry</span> = <span class="k">$true</span> }   <span class="c"># rate limited</span>
+        {<span class="v">$_</span> <span class="k">-ge</span> 500} { <span class="v">$shouldRetry</span> = <span class="k">$true</span> }   <span class="c"># server error</span>
+        default { <span class="k">throw</span> }                    <span class="c"># other 4xx: permanent, re-throw</span>
+    }
+}</pre>
+    </div>
+  </section>
+
+  <!-- ============ 6 ============ -->
+  <section id="client">
+    <div class="section-head"><span class="num">06</span><h2>Build one robust API client</h2></div>
+
+    <p>Everything above — TLS setup, token refresh, session reuse, Retry-After, backoff, status branching, pagination, logging — belongs in <strong>one reusable function</strong> you call everywhere, instead of scattered across every script. This is the payoff: a single <code class="inl">Invoke-ApiRequest</code> that every other call goes through. Write it once, and every consumer inherits the resilience.</p>
+
+    <div class="callout tip"><span class="ico">→</span><div>The function below is self-contained and pastes into any 5.1 script. It handles TLS, auth injection, automatic 401 refresh, Retry-After-aware backoff, status branching, and a bounded retry loop. Swap the <code class="inl">Get-ValidToken</code> call for your own auth (Basic header, session id, etc.).</div></div>
+
+    <div class="code">
+      <div class="code-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="label">Invoke-ApiRequest.ps1 — the one client</span><span class="lang">powershell</span></div>
+<pre><span class="c"># ============================================================</span>
+<span class="c">#  Invoke-ApiRequest — a resilient REST client for PS 5.1</span>
+<span class="c">#  Handles: TLS 1.2, auth, 401-refresh, 429/5xx retry with</span>
+<span class="c">#  Retry-After + backoff, status branching, and logging.</span>
+<span class="c"># ============================================================</span>
+
+<span class="c"># Run TLS/cert prep ONCE at module load, not per call</span>
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+<span class="k">function</span> <span class="cmd">Invoke-ApiRequest</span> {
+    [CmdletBinding()]
+    <span class="k">param</span>(
+        [Parameter(Mandatory)][string]<span class="v">$Uri</span>,
+        [ValidateSet(<span class="s">"Get"</span>,<span class="s">"Post"</span>,<span class="s">"Put"</span>,<span class="s">"Patch"</span>,<span class="s">"Delete"</span>)]
+        [string]<span class="v">$Method</span>      = <span class="s">"Get"</span>,
+        <span class="v">$Body</span>,                       <span class="c"># hashtable/object; auto-JSON below</span>
+        [hashtable]<span class="v">$Headers</span> = @{},
+        [int]<span class="v">$TimeoutSec</span>   = 30,
+        [int]<span class="v">$MaxAttempts</span>  = 5
+    )
+
+    <span class="c"># Inject a fresh bearer token every call (see §5 Get-ValidToken)</span>
+    <span class="v">$Headers</span>[<span class="s">"Authorization"</span>] = <span class="s">"Bearer $(Get-ValidToken)"</span>
+
+    <span class="c"># Serialize object bodies to JSON with a safe depth (5.1 caveat)</span>
+    <span class="v">$jsonBody</span> = <span class="k">$null</span>
+    <span class="k">if</span> (<span class="v">$Body</span>) {
+        <span class="v">$jsonBody</span> = <span class="k">if</span> (<span class="v">$Body</span> <span class="k">-is</span> [string]) { <span class="v">$Body</span> }
+                    <span class="k">else</span> { <span class="v">$Body</span> | <span class="cmd">ConvertTo-Json</span> <span class="k">-Depth</span> 10 }
+    }
+
+    <span class="k">for</span> (<span class="v">$attempt</span> = 1; <span class="v">$attempt</span> <span class="k">-le</span> <span class="v">$MaxAttempts</span>; <span class="v">$attempt</span>++) {
+        <span class="k">try</span> {
+            <span class="v">$p</span> = @{
+                Uri         = <span class="v">$Uri</span>;      Method  = <span class="v">$Method</span>
+                Headers     = <span class="v">$Headers</span>;  TimeoutSec = <span class="v">$TimeoutSec</span>
+                ErrorAction = <span class="s">"Stop"</span>
+            }
+            <span class="k">if</span> (<span class="v">$jsonBody</span>) {
+                <span class="v">$p</span>.Body        = <span class="v">$jsonBody</span>
+                <span class="v">$p</span>.ContentType = <span class="s">"application/json"</span>
+            }
+            <span class="cmd">Write-Verbose</span> <span class="s">"[$(Get-Date -f o)] $Method $Uri (attempt $attempt)"</span>
+            <span class="k">return</span> <span class="cmd">Invoke-RestMethod</span> @p        <span class="c"># SUCCESS — exit here</span>
+        }
+        <span class="k">catch</span> {
+            <span class="v">$resp</span> = <span class="v">$_</span>.Exception.Response
+            <span class="v">$code</span> = <span class="k">if</span> (<span class="v">$resp</span>) { <span class="v">$resp</span>.StatusCode.value__ } <span class="k">else</span> { 0 }
+
+            <span class="k">switch</span> (<span class="v">$code</span>) {
+                401 {
+                    <span class="cmd">Write-Verbose</span> <span class="s">"401 — refreshing token, retrying"</span>
+                    <span class="v">$Headers</span>[<span class="s">"Authorization"</span>] = <span class="s">"Bearer $(Get-ValidToken)"</span>
+                }
+                404 { <span class="k">return</span> <span class="k">$null</span> }                <span class="c"># caller handles absence</span>
+                403 { <span class="k">throw</span> <span class="s">"403 Forbidden: $Uri"</span> }
+                429     { }                          <span class="c"># fall through to backoff</span>
+                {<span class="v">$_</span> <span class="k">-ge</span> 500} { }                     <span class="c"># fall through to backoff</span>
+                default {
+                    <span class="c"># Permanent 4xx (400/409/422...) — surface the body</span>
+                    <span class="k">if</span> (<span class="v">$resp</span>) {
+                        <span class="v">$r</span> = <span class="cmd">New-Object</span> IO.StreamReader(<span class="v">$resp</span>.GetResponseStream())
+                        <span class="v">$r</span>.BaseStream.Position = 0
+                        <span class="cmd">Write-Warning</span> (<span class="v">$r</span>.ReadToEnd())
+                    }
+                    <span class="k">throw</span>
+                }
+            }
+
+            <span class="k">if</span> (<span class="v">$attempt</span> <span class="k">-eq</span> <span class="v">$MaxAttempts</span>) { <span class="k">throw</span> <span class="s">"Gave up after $MaxAttempts attempts: $Uri"</span> }
+
+            <span class="v">$delay</span> = Get-RetryDelay <span class="k">-Exception</span> <span class="v">$_</span>.Exception <span class="k">-Attempt</span> <span class="v">$attempt</span>
+            <span class="cmd">Write-Warning</span> <span class="s">"HTTP $code — waiting $delay s (attempt $attempt/$MaxAttempts)"</span>
+            <span class="cmd">Start-Sleep</span> <span class="k">-Seconds</span> <span class="v">$delay</span>
+        }
+    }
+}</pre>
+    </div>
+
+    <h3>Pagination on top of the client</h3>
+    <p>Because every call now goes through one hardened function, pagination becomes a thin loop that inherits all the resilience for free:</p>
+
+    <div class="code">
+      <div class="code-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="label">get-all-pages.ps1</span><span class="lang">powershell</span></div>
+<pre><span class="k">function</span> <span class="cmd">Get-AllPages</span> {
+    <span class="k">param</span>([string]<span class="v">$Uri</span>)
+    <span class="v">$all</span> = @()
+    <span class="k">do</span> {
+        <span class="v">$page</span> = Invoke-ApiRequest <span class="k">-Uri</span> <span class="v">$Uri</span>          <span class="c"># retries, refresh, backoff — all free</span>
+        <span class="v">$all</span> += <span class="v">$page</span>.value
+        <span class="v">$Uri</span>  = <span class="v">$page</span>.<span class="s">'@odata.nextLink'</span>            <span class="c"># or $page.links.next, per API</span>
+    } <span class="k">while</span> (<span class="v">$Uri</span>)
+    <span class="k">return</span> <span class="v">$all</span>
+}
+
+<span class="c"># Usage — one line, fully resilient</span>
+<span class="v">$servers</span> = Get-AllPages <span class="k">-Uri</span> <span class="s">"https://api.example.com/v1/servers?limit=100"</span>
+<span class="cmd">Write-Host</span> <span class="s">"Retrieved $($servers.Count) servers across all pages"</span></pre>
+    </div>
+
+    <div class="callout tip"><span class="ico">→</span><div><strong>Why this matters:</strong> without a shared client, every script re-implements TLS, retries, and refresh — and each does it slightly differently, so bugs hide in the gaps. One <code class="inl">Invoke-ApiRequest</code> means one place to fix, one place to test, and consistent behavior across your whole toolkit. Drop it in a <code class="inl">.psm1</code> module and <code class="inl">Import-Module</code> it everywhere.</div></div>
+  </section>
+
+  <!-- ============ 7 ============ -->
   <section id="proscons">
-    <div class="section-head"><span class="num">05</span><h2>Pros &amp; cons of PowerShell 5.1 for REST</h2></div>
+    <div class="section-head"><span class="num">07</span><h2>Pros &amp; cons of PowerShell 5.1 for REST</h2></div>
 
     <p>PowerShell 5.1 is Windows PowerShell — the last of the .NET Framework line, frozen in feature terms but installed and enabled on every supported Windows Server and client. That ubiquity is its whole value proposition, and also the source of its friction.</p>
 
@@ -904,9 +1149,9 @@ curl.exe -k -i -u admin:calvin `
     <div class="callout tip"><span class="ico">→</span><div><strong>When to reach for PowerShell 7 instead:</strong> if you can install it, PS 7 removes nearly every con above — <code class="inl">-SkipCertificateCheck</code>, TLS 1.2 by default, sane error bodies via <code class="inl">-SkipHttpErrorCheck</code> and <code class="inl">$_.ErrorDetails.Message</code>, parallel loops, and better <code class="inl">ConvertTo-Json</code>. Use 5.1 when you <em>can't</em> install anything; use 7 when you can.</div></div>
   </section>
 
-  <!-- ============ 6 ============ -->
+  <!-- ============ 8 ============ -->
   <section id="idrac">
-    <div class="section-head"><span class="num">06</span><h2>Example — Dell iDRAC (Redfish API)</h2></div>
+    <div class="section-head"><span class="num">08</span><h2>Example — Dell iDRAC (Redfish API)</h2></div>
 
     <span class="device-tag">◆ Dell iDRAC · Redfish v1</span>
     <p><strong>Redfish</strong> is the DMTF standard REST API that Dell iDRAC (7/8/9) exposes for out-of-band server management. Everything hangs off <code class="inl">/redfish/v1/</code>. The examples below assume the TLS/cert prep from §2 has already run in the session.</p>
@@ -1032,9 +1277,9 @@ Graceful restart issued.</div>
     <div class="callout tip"><span class="ico">→</span><div>iDRAC allows only a handful of concurrent sessions. Leaked sessions eventually block all logins until they expire. Wrap the whole flow in <code class="inl">try/finally</code> and put the DELETE in the <code class="inl">finally</code> so it runs even on error.</div></div>
   </section>
 
-  <!-- ============ 7 ============ -->
+  <!-- ============ 9 ============ -->
   <section id="esxi">
-    <div class="section-head"><span class="num">07</span><h2>Example — VMware ESXi (vSphere REST API)</h2></div>
+    <div class="section-head"><span class="num">09</span><h2>Example — VMware ESXi (vSphere REST API)</h2></div>
 
     <span class="device-tag">◆ VMware vSphere · REST API</span>
     <p>The <strong>vSphere REST API</strong> exposes VM and host management over HTTP. It's fullest against <strong>vCenter</strong>; standalone ESXi hosts expose a subset. Authentication is session-based: POST Basic credentials to the session endpoint, receive a session ID, send it as a header, and delete it when done.</p>
