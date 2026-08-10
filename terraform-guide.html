@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terraform for Network Engineers — A CCNP-Level Guide</title>
+<style>
+  :root{
+    --ink:#1a1a1c;
+    --ink-soft:#4a4a52;
+    --ink-faint:#8a8a94;
+    --line:#e6e6ea;
+    --line-soft:#f0f0f3;
+    --paper:#ffffff;
+    --wash:#fafafb;
+    --accent:#5b3fd6;      /* terraform-adjacent violet, muted */
+    --accent-soft:#f3f0fd;
+    --net:#0b7a75;         /* teal for the "network CLI" world */
+    --net-soft:#eef7f6;
+    --code-bg:#fbfbfc;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code','Roboto Mono',Menlo,Consolas,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+  body{
+    font-family:var(--sans);
+    color:var(--ink);
+    background:var(--paper);
+    line-height:1.65;
+    font-size:16px;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+
+  /* ---------- top nav ---------- */
+  nav.top{
+    position:sticky;top:0;z-index:50;
+    background:rgba(255,255,255,.85);
+    backdrop-filter:saturate(180%) blur(12px);
+    border-bottom:1px solid var(--line);
+  }
+  nav.top .inner{
+    max-width:1080px;margin:0 auto;padding:14px 32px;
+    display:flex;align-items:center;gap:28px;flex-wrap:wrap;
+  }
+  nav.top .brand{
+    font-weight:650;letter-spacing:-.02em;font-size:15px;
+    display:flex;align-items:center;gap:9px;margin-right:auto;
+  }
+  nav.top .brand .mark{
+    width:22px;height:22px;border-radius:5px;
+    background:var(--accent);
+    display:grid;place-items:center;
+    color:#fff;font-family:var(--mono);font-size:13px;font-weight:700;
+  }
+  nav.top a.link{
+    color:var(--ink-soft);text-decoration:none;font-size:13.5px;font-weight:500;
+    padding:4px 0;border-bottom:1.5px solid transparent;transition:color .15s,border-color .15s;
+  }
+  nav.top a.link:hover{color:var(--accent);border-bottom-color:var(--accent)}
+  @media(max-width:820px){nav.top a.link{display:none}}
+
+  /* ---------- layout ---------- */
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+  @media(max-width:640px){.wrap,nav.top .inner{padding-left:20px;padding-right:20px}}
+
+  /* ---------- hero ---------- */
+  header.hero{padding:88px 0 64px;border-bottom:1px solid var(--line)}
+  .eyebrow{
+    font-family:var(--mono);font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--accent);font-weight:600;margin-bottom:22px;
+  }
+  h1{
+    font-size:clamp(34px,5.2vw,54px);line-height:1.05;letter-spacing:-.035em;font-weight:680;
+    max-width:16ch;margin-bottom:26px;
+  }
+  h1 em{font-style:normal;color:var(--accent)}
+  .lede{font-size:19px;color:var(--ink-soft);max-width:60ch;line-height:1.6}
+  .hero-meta{
+    display:flex;gap:36px;flex-wrap:wrap;margin-top:38px;padding-top:30px;border-top:1px solid var(--line-soft);
+  }
+  .hero-meta div{display:flex;flex-direction:column;gap:3px}
+  .hero-meta .k{font-family:var(--mono);font-size:12px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.06em}
+  .hero-meta .v{font-size:15px;font-weight:550;color:var(--ink)}
+
+  /* ---------- sections ---------- */
+  section{padding:74px 0;border-bottom:1px solid var(--line)}
+  section:last-of-type{border-bottom:none}
+  .sec-head{display:flex;align-items:baseline;gap:16px;margin-bottom:34px}
+  .sec-num{
+    font-family:var(--mono);font-size:13px;font-weight:600;color:var(--accent);
+    padding-top:6px;flex-shrink:0;
+  }
+  h2{font-size:clamp(26px,3.4vw,34px);letter-spacing:-.03em;font-weight:640;line-height:1.12}
+  h3{font-size:20px;letter-spacing:-.02em;font-weight:620;margin:40px 0 14px}
+  h4{font-size:15px;font-weight:620;margin:26px 0 10px;letter-spacing:-.01em}
+  p{max-width:70ch;margin-bottom:16px;color:var(--ink-soft)}
+  p strong{color:var(--ink);font-weight:600}
+  .sec-intro{font-size:17.5px;color:var(--ink-soft);max-width:66ch}
+  a.inline{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-soft)}
+  a.inline:hover{border-bottom-color:var(--accent)}
+  code.k{
+    font-family:var(--mono);font-size:.86em;background:var(--wash);
+    border:1px solid var(--line);border-radius:5px;padding:1.5px 6px;color:var(--ink);
+  }
+
+  /* ---------- code blocks ---------- */
+  .code{
+    border:1px solid var(--line);border-radius:11px;overflow:hidden;
+    margin:20px 0;background:var(--code-bg);
+  }
+  .code .bar{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 15px;background:#fff;border-bottom:1px solid var(--line);
+  }
+  .code .bar .dot{width:9px;height:9px;border-radius:50%}
+  .code .bar .fname{
+    font-family:var(--mono);font-size:12.5px;color:var(--ink-faint);font-weight:500;margin-left:2px;
+  }
+  .code .bar .tag{
+    margin-left:auto;font-family:var(--mono);font-size:10.5px;font-weight:600;
+    letter-spacing:.05em;text-transform:uppercase;padding:2.5px 8px;border-radius:20px;
+  }
+  .tag.hcl{background:var(--accent-soft);color:var(--accent)}
+  .tag.cli{background:var(--net-soft);color:var(--net)}
+  .tag.out{background:#f3f3f5;color:var(--ink-faint)}
+  pre{
+    font-family:var(--mono);font-size:13px;line-height:1.7;
+    padding:16px 18px;overflow-x:auto;color:var(--ink);tab-size:2;
+  }
+  pre .c{color:var(--ink-faint);font-style:italic}       /* comment */
+  pre .kw{color:var(--accent);font-weight:600}            /* keyword */
+  pre .st{color:var(--net)}                               /* string */
+  pre .nm{color:#b0562a}                                  /* number/attr */
+  pre .pr{color:var(--ink-faint)}                         /* prompt */
+  pre .ad{color:#1a7f4b;font-weight:600}                  /* + added */
+  pre .rm{color:#c23b3b;font-weight:600}                  /* - removed */
+  pre .hi{color:var(--ink);font-weight:600}
+
+  /* ---------- two-column compare ---------- */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0}
+  @media(max-width:760px){.split{grid-template-columns:1fr}}
+  .split .col .lbl{
+    display:flex;align-items:center;gap:8px;margin-bottom:8px;
+    font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  }
+  .split .col.net .lbl{color:var(--net)}
+  .split .col.tf .lbl{color:var(--accent)}
+  .split .col .lbl .pip{width:8px;height:8px;border-radius:2px}
+  .split .col.net .pip{background:var(--net)}
+  .split .col.tf .pip{background:var(--accent)}
+  .split .code{margin:0;height:100%}
+
+  /* ---------- callout ---------- */
+  .note{
+    border-left:3px solid var(--accent);background:var(--accent-soft);
+    padding:16px 20px;border-radius:0 10px 10px 0;margin:22px 0;
+  }
+  .note p{margin:0;color:var(--ink);font-size:14.5px}
+  .note .h{font-weight:650;font-size:12.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--accent);margin-bottom:5px;font-family:var(--mono)}
+  .note.warn{border-left-color:#c98a2b;background:#fdf7ec}
+  .note.warn .h{color:#b57216}
+
+  /* ---------- lifecycle strip ---------- */
+  .lifecycle{display:flex;gap:0;margin:8px 0 30px;flex-wrap:wrap}
+  .lifecycle .step{
+    flex:1;min-width:140px;padding:16px 18px;border:1px solid var(--line);
+    border-right:none;background:var(--wash);
+  }
+  .lifecycle .step:first-child{border-radius:10px 0 0 10px}
+  .lifecycle .step:last-child{border-right:1px solid var(--line);border-radius:0 10px 10px 0}
+  @media(max-width:680px){
+    .lifecycle .step{border-right:1px solid var(--line);border-radius:10px!important;margin-bottom:8px}
+  }
+  .lifecycle .cmd{font-family:var(--mono);font-size:14px;font-weight:600;color:var(--accent);margin-bottom:5px}
+  .lifecycle .desc{font-size:12.5px;color:var(--ink-soft);line-height:1.45}
+
+  /* ---------- table ---------- */
+  .tbl{width:100%;border-collapse:collapse;margin:24px 0;font-size:14.5px}
+  .tbl th,.tbl td{text-align:left;padding:14px 16px;vertical-align:top;border-bottom:1px solid var(--line)}
+  .tbl thead th{
+    font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--ink-faint);font-weight:600;border-bottom:1.5px solid var(--line)
+  }
+  .tbl tbody th{font-weight:620;color:var(--ink);white-space:nowrap}
+  .tbl td{color:var(--ink-soft)}
+  .tbl td.dec{color:var(--accent);font-weight:550}
+  .tbl td.pro{color:var(--net);font-weight:550}
+  .tbl tr:last-child td,.tbl tr:last-child th{border-bottom:none}
+  @media(max-width:640px){
+    .tbl,.tbl thead,.tbl tbody,.tbl th,.tbl td,.tbl tr{display:block}
+    .tbl thead{display:none}
+    .tbl tbody th{white-space:normal}
+    .tbl tr{border:1px solid var(--line);border-radius:10px;margin-bottom:12px;padding:6px 12px}
+    .tbl td,.tbl th{border:none;padding:8px 4px}
+    .tbl td::before{content:attr(data-l);display:block;font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);margin-bottom:2px}
+  }
+
+  /* ---------- footer ---------- */
+  footer{padding:48px 0 64px;color:var(--ink-faint);font-size:13.5px}
+  footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;align-items:center}
+  footer code{font-family:var(--mono)}
+</style>
+</head>
+<body>
+
+<nav class="top">
+  <div class="inner">
+    <div class="brand"><span class="mark">tf</span> Terraform · for network engineers</div>
+    <a class="link" href="#why">Why Terraform</a>
+    <a class="link" href="#lifecycle">Lifecycle</a>
+    <a class="link" href="#declarative">Declarative config</a>
+    <a class="link" href="#state">State</a>
+    <a class="link" href="#versus">Declarative vs procedural</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">CCNP → Infrastructure as Code</div>
+    <h1>You already know the network. Now <em>describe</em> it instead of typing it.</h1>
+    <p class="lede">You can configure a VLAN, tune an OSPF area, and write an ACL in your sleep. This guide maps that muscle memory onto Terraform: same intent, expressed once as desired state, applied to a real Cisco provider — IOS&nbsp;XE, Meraki, or ACI.</p>
+    <div class="hero-meta">
+      <div><span class="k">Audience</span><span class="v">CCNP-level, new to IaC</span></div>
+      <div><span class="k">Provider</span><span class="v">cisco/iosxe · meraki · aci</span></div>
+      <div><span class="k">Terraform</span><span class="v">v1.5+</span></div>
+      <div><span class="k">You'll cover</span><span class="v">Lifecycle · VLAN/OSPF/ACL · State · Paradigms</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ 0. WHY ============ -->
+<section id="why">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">00</div>
+      <div>
+        <h2>Why Terraform exists, and the problem it solves</h2>
+        <p class="sec-intro" style="margin-top:12px">Before the syntax, the motivation. Terraform is answer to a question every growing network eventually asks: <em>how do I know my devices are configured the way I think they are — and how do I change hundreds of them without it becoming a full-time job of typing?</em></p>
+      </div>
+    </div>
+
+    <h3>The problem: configuration drift and the tyranny of "how"</h3>
+    <p>Picture the estate you actually run. Config lives in the running-config of each box, in a pile of change tickets, in a few engineers' heads, and maybe in a backup someone remembers to pull. Over months, reality and documentation quietly diverge. A midnight fix on one switch never makes it back to the "golden" template. A device gets replaced and the replacement is <em>almost</em> the same. This gap between intended and actual state is <strong>configuration drift</strong>, and it's where outages and audit failures come from.</p>
+    <p>The traditional tools all describe <strong>how</strong> to get there — an ordered list of commands to type or a script to run. That works until it doesn't: the same script run twice may double-apply or error; nobody can tell you the current state without logging in and looking; and "make these 200 switches match" becomes 200 careful, fallible repetitions.</p>
+
+    <div class="note">
+      <div class="h">The core idea</div>
+      <p>Terraform flips the model. You write down the <strong>desired end state</strong> as code, once. Terraform reads the <em>actual</em> state of your devices, computes the difference, and makes only the changes needed to close the gap. Documentation and reality can no longer drift, because the code <em>is</em> the configuration — and it's the thing that gets applied.</p>
+    </div>
+
+    <h3>What that buys you</h3>
+    <p>Four properties fall out of the declarative-as-code model, and together they're the reason Terraform exists:</p>
+
+    <div class="lifecycle">
+      <div class="step"><div class="cmd">Idempotent</div><div class="desc">Apply once or a hundred times — the result converges to the same state. No double-config, no accumulation.</div></div>
+      <div class="step"><div class="cmd">Visible</div><div class="desc">A dry-run shows the exact diff before anything changes. State is the always-current record of what's out there.</div></div>
+      <div class="step"><div class="cmd">Versioned</div><div class="desc">Config lives in Git — peer-reviewed, diffable, revertable. Every change has an author and a reason.</div></div>
+      <div class="step"><div class="cmd">Repeatable</div><div class="desc">The same module builds device #1 and device #500 identically. Standardization stops being aspirational.</div></div>
+    </div>
+
+    <h3>When to reach for Terraform — and when not to</h3>
+    <p>Terraform isn't the only tool in the automation drawer, and it isn't always the right one. It's built to <strong>provision and manage the desired state of infrastructure</strong>. Other tools are built for other jobs, and reaching for the wrong one is where teams get frustrated.</p>
+
+    <table class="tbl">
+      <thead>
+        <tr><th>Tool</th><th>Built for</th><th>Reach for it when…</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th data-l="Tool">Terraform</th>
+          <td data-l="Built for">Declaring &amp; enforcing the desired state of infrastructure across many devices.</td>
+          <td class="dec" data-l="Reach for it when…">You want config as code, drift detection, dry-runs, and repeatable builds at scale — VLANs, OSPF, ACLs, tenants, whole fabrics.</td>
+        </tr>
+        <tr>
+          <th data-l="Tool">Ansible</th>
+          <td data-l="Built for">Procedural task orchestration and one-shot config pushes; strong for OS/app config.</td>
+          <td class="pro" data-l="Reach for it when…">You need ordered, step-by-step actions or ad-hoc pushes, and don't need a persistent record of desired state.</td>
+        </tr>
+        <tr>
+          <th data-l="Tool">Python + Netmiko</th>
+          <td data-l="Built for">Bespoke logic, data gathering, and gluing systems together.</td>
+          <td class="pro" data-l="Reach for it when…">The task is custom scripting — parsing output, complex conditional logic, integrations no tool models yet.</td>
+        </tr>
+        <tr>
+          <th data-l="Tool">The CLI / SSH</th>
+          <td data-l="Built for">Interactive, immediate control of one device.</td>
+          <td class="pro" data-l="Reach for it when…">Troubleshooting, <code class="k">show</code> commands, or a single urgent fix on a single box.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note warn">
+      <div class="h">A useful rule of thumb</div>
+      <p>Ask: <em>"Do I need this to be the same, every time, across many things — and do I need to prove what it looks like?"</em> If yes, that's Terraform's home turf. If you're doing something once, interactively, or writing genuinely custom logic, another tool will serve you better. They're complementary — plenty of shops let Terraform own desired state and call Ansible or scripts for the imperative glue around it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 1. LIFECYCLE ============ -->
+<section id="lifecycle">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">01</div>
+      <div>
+        <h2>The lifecycle: init, plan, apply, destroy</h2>
+        <p class="sec-intro" style="margin-top:12px">Four commands run the whole show. Think of them as the config-mode workflow for an entire fabric: connect, dry-run the diff, commit, and — when a lab is done — tear it all back down cleanly.</p>
+      </div>
+    </div>
+
+    <div class="lifecycle">
+      <div class="step"><div class="cmd">init</div><div class="desc">Downloads the provider plugin and prepares the backend. Run once per project.</div></div>
+      <div class="step"><div class="cmd">plan</div><div class="desc">Dry run. Diffs desired state against reality and prints exactly what will change.</div></div>
+      <div class="step"><div class="cmd">apply</div><div class="desc">Executes the plan. Pushes config to the devices and records the result in state.</div></div>
+      <div class="step"><div class="cmd">destroy</div><div class="desc">Removes everything Terraform created — in reverse dependency order.</div></div>
+    </div>
+
+    <h3>Point Terraform at a real device</h3>
+    <p>Every project starts with a provider block. This is your authentication and transport — the equivalent of an SSH session with credentials and a target IP. Below, IOS&nbsp;XE talks to a device over RESTCONF.</p>
+
+    <div class="code">
+      <div class="bar">
+        <span class="dot" style="background:#e0574a"></span><span class="dot" style="background:#e7b13f"></span><span class="dot" style="background:#3fb463"></span>
+        <span class="fname">providers.tf</span><span class="tag hcl">HCL</span>
+      </div>
+<pre><span class="kw">terraform</span> {
+  <span class="kw">required_providers</span> {
+    iosxe = {
+      source  = <span class="st">"CiscoDevNet/iosxe"</span>
+      version = <span class="st">"~&gt; 0.5"</span>
+    }
+  }
+}
+
+<span class="c"># Transport + credentials — one block per managed device</span>
+<span class="kw">provider</span> <span class="st">"iosxe"</span> {
+  username = <span class="st">"admin"</span>
+  password = <span class="st">var.device_password</span>   <span class="c"># never hard-code secrets</span>
+  url      = <span class="st">"https://192.0.2.10"</span>     <span class="c"># RESTCONF endpoint</span>
+  insecure = <span class="nm">true</span>                     <span class="c"># lab only; use real certs in prod</span>
+}</pre>
+    </div>
+
+    <div class="note">
+      <div class="h">Provider = feature set</div>
+      <p>Swap the provider, keep the workflow. <code class="k">cisco/meraki</code> talks to the Dashboard API for cloud-managed switching and wireless; <code class="k">cisco/aci</code> models tenants, bridge domains, and EPGs against the APIC. The four lifecycle commands never change — only the resources you declare do.</p>
+    </div>
+
+    <h3>init — prepare the working directory</h3>
+    <div class="code">
+      <div class="bar"><span class="dot" style="background:#e0574a"></span><span class="dot" style="background:#e7b13f"></span><span class="dot" style="background:#3fb463"></span><span class="fname">terminal</span><span class="tag out">CLI + output</span></div>
+<pre><span class="pr">$</span> terraform init
+
+<span class="hi">Initializing provider plugins...</span>
+- Finding ciscodevnet/iosxe versions matching <span class="st">"~&gt; 0.5"</span>...
+- Installing ciscodevnet/iosxe v0.5.7...
+- Installed ciscodevnet/iosxe v0.5.7 (signed by a HashiCorp partner)
+
+<span class="ad">Terraform has been successfully initialized!</span></pre>
+    </div>
+    <p>Behind the scenes: Terraform reads <code class="k">required_providers</code>, pulls the plugin binary into <code class="k">.terraform/</code>, and writes a <code class="k">.terraform.lock.hcl</code> so every teammate gets the identical provider version. Analogous to standardizing an IOS image across a stack before you push config.</p>
+
+    <h3>plan — the dry run you always wanted</h3>
+    <p>This is the safety net a network engineer will love most. <strong>Nothing touches the device.</strong> Terraform builds a dependency graph, compares your files to recorded state, and prints a <code class="k">show run</code>-style diff of intended changes.</p>
+    <div class="code">
+      <div class="bar"><span class="dot" style="background:#e0574a"></span><span class="dot" style="background:#e7b13f"></span><span class="dot" style="background:#3fb463"></span><span class="fname">terminal</span><span class="tag out">CLI + output</span></div>
+<pre><span class="pr">$</span> terraform plan
+
+Terraform will perform the following actions:
+
+  <span class="ad"># iosxe_vlan.data will be created</span>
+  <span class="ad">+</span> resource <span class="st">"iosxe_vlan"</span> <span class="st">"data"</span> {
+      <span class="ad">+</span> vlan_id = <span class="nm">120</span>
+      <span class="ad">+</span> name    = <span class="st">"USERS_DATA"</span>
+    }
+
+<span class="hi">Plan: 1 to add, 0 to change, 0 to destroy.</span>
+
+<span class="c">Note: You didn't use the -out option to save this plan.</span></pre>
+    </div>
+    <div class="note">
+      <div class="h">Read the symbols like a diff</div>
+      <p><span style="color:#1a7f4b;font-weight:600">+</span> create · <span style="color:#c23b3b;font-weight:600">-</span> destroy · <span style="color:#b0562a;font-weight:600">~</span> update in place · <span style="color:#c98a2b;font-weight:600">-/+</span> replace (destroy then recreate). A plan full of unexpected <span style="color:#c23b3b;font-weight:600">-/+</span> replacements is your cue to stop and investigate before applying.</p>
+    </div>
+
+    <h3>apply — commit to the fabric</h3>
+    <div class="code">
+      <div class="bar"><span class="dot" style="background:#e0574a"></span><span class="dot" style="background:#e7b13f"></span><span class="dot" style="background:#3fb463"></span><span class="fname">terminal</span><span class="tag out">CLI + output</span></div>
+<pre><span class="pr">$</span> terraform apply
+
+<span class="c"># ...same plan is reprinted...</span>
+Do you want to perform these actions?
+  Terraform will perform the actions described above.
+  Only <span class="st">'yes'</span> will be accepted to approve.
+
+  Enter a value: <span class="hi">yes</span>
+
+iosxe_vlan.data: Creating...
+iosxe_vlan.data: Creation complete after 2s [id=Cisco-IOS-XE-native:vlan/120]
+
+<span class="ad">Apply complete! Resources: 1 added, 0 changed, 0 destroyed.</span></pre>
+    </div>
+    <p>Terraform now pushes config over RESTCONF, waits for each device to confirm, and records the real-world object in state. Add <code class="k">-auto-approve</code> in CI pipelines; keep the interactive prompt for anything touching production.</p>
+
+    <h3>destroy — reverse-order teardown</h3>
+    <p>Perfect for lab pods and ephemeral environments. Terraform walks the dependency graph <strong>backwards</strong> so it removes an SVI before the VLAN it depends on, never orphaning config.</p>
+    <div class="code">
+      <div class="bar"><span class="dot" style="background:#e0574a"></span><span class="dot" style="background:#e7b13f"></span><span class="dot" style="background:#3fb463"></span><span class="fname">terminal</span><span class="tag out">CLI + output</span></div>
+<pre><span class="pr">$</span> terraform destroy
+
+iosxe_vlan.data: Destroying... [id=Cisco-IOS-XE-native:vlan/120]
+iosxe_vlan.data: Destruction complete after 1s
+
+<span class="rm">Destroy complete! Resources: 0 added, 0 changed, 1 destroyed.</span></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. DECLARATIVE ============ -->
+<section id="declarative">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">02</div>
+      <div>
+        <h2>The same VLAN, OSPF, and ACL — declared once</h2>
+        <p class="sec-intro" style="margin-top:12px">Here's the mental shift. On the CLI you type a <em>sequence of commands</em> and the box appends them. In Terraform you write the <em>end state</em> and Terraform figures out the commands. Re-run it ten times: the result is identical. That's convergence, and it's the whole point.</p>
+      </div>
+    </div>
+
+    <h3>VLAN + access port</h3>
+    <p>Left is what you'd type today. Right is the desired state. Both create VLAN 120 and drop <code class="k">Gi1/0/5</code> into it.</p>
+    <div class="split">
+      <div class="col net">
+        <div class="lbl"><span class="pip"></span>IOS CLI — procedural</div>
+        <div class="code">
+          <div class="bar"><span class="fname">config terminal</span><span class="tag cli">IOS</span></div>
+<pre>vlan 120
+ name USERS_DATA
+!
+interface Gi1/0/5
+ switchport mode access
+ switchport access vlan 120
+!
+end
+write memory</pre>
+        </div>
+      </div>
+      <div class="col tf">
+        <div class="lbl"><span class="pip"></span>Terraform — declarative</div>
+        <div class="code">
+          <div class="bar"><span class="fname">vlans.tf</span><span class="tag hcl">HCL</span></div>
+<pre><span class="kw">resource</span> <span class="st">"iosxe_vlan"</span> <span class="st">"data"</span> {
+  vlan_id = <span class="nm">120</span>
+  name    = <span class="st">"USERS_DATA"</span>
+}
+
+<span class="kw">resource</span> <span class="st">"iosxe_interface_ethernet"</span> <span class="st">"gi5"</span> {
+  name             = <span class="st">"1/0/5"</span>
+  switchport_access_vlan = <span class="nm">120</span>
+  switchport_mode_access = <span class="nm">true</span>
+}</pre>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <div class="h">Convergence, not accumulation</div>
+      <p>Change <code class="k">120</code> to <code class="k">130</code> and re-apply. The CLI would leave VLAN 120 behind and add 130. Terraform sees state drift and issues the exact reconfigure to <em>match</em> the file — the old VLAN is removed. Your files are always the source of truth.</p>
+    </div>
+
+    <h3>OSPF process, area, and networks</h3>
+    <div class="split">
+      <div class="col net">
+        <div class="lbl"><span class="pip"></span>IOS CLI — procedural</div>
+        <div class="code">
+          <div class="bar"><span class="fname">config terminal</span><span class="tag cli">IOS</span></div>
+<pre>router ospf 10
+ router-id 10.0.0.1
+ network 10.10.0.0 0.0.255.255 area 0
+ network 10.20.0.0 0.0.255.255 area 0
+ passive-interface default
+ no passive-interface Gi1/0/1
+!
+end</pre>
+        </div>
+      </div>
+      <div class="col tf">
+        <div class="lbl"><span class="pip"></span>Terraform — declarative</div>
+        <div class="code">
+          <div class="bar"><span class="fname">ospf.tf</span><span class="tag hcl">HCL</span></div>
+<pre><span class="kw">resource</span> <span class="st">"iosxe_router_ospf"</span> <span class="st">"core"</span> {
+  process_id = <span class="nm">10</span>
+  router_id  = <span class="st">"10.0.0.1"</span>
+
+  <span class="kw">networks</span> {
+    ip           = <span class="st">"10.10.0.0"</span>
+    wildcard     = <span class="st">"0.0.255.255"</span>
+    area         = <span class="st">"0"</span>
+  }
+  <span class="kw">networks</span> {
+    ip           = <span class="st">"10.20.0.0"</span>
+    wildcard     = <span class="st">"0.0.255.255"</span>
+    area         = <span class="st">"0"</span>
+  }
+  passive_interface_default = <span class="nm">true</span>
+}</pre>
+        </div>
+      </div>
+    </div>
+
+    <h3>Named ACL with multiple ACEs</h3>
+    <p>An ordered list of ACEs maps cleanly to an ordered list of nested blocks. Sequence numbers keep ACE order deterministic across applies.</p>
+    <div class="split">
+      <div class="col net">
+        <div class="lbl"><span class="pip"></span>IOS CLI — procedural</div>
+        <div class="code">
+          <div class="bar"><span class="fname">config terminal</span><span class="tag cli">IOS</span></div>
+<pre>ip access-list extended GUEST_IN
+ 10 permit tcp 10.30.0.0 0.0.255.255
+    any eq 443
+ 20 permit udp 10.30.0.0 0.0.255.255
+    any eq 53
+ 30 deny   ip  10.30.0.0 0.0.255.255
+    10.0.0.0 0.255.255.255
+ 40 permit ip  any any
+!
+end</pre>
+        </div>
+      </div>
+      <div class="col tf">
+        <div class="lbl"><span class="pip"></span>Terraform — declarative</div>
+        <div class="code">
+          <div class="bar"><span class="fname">acl.tf</span><span class="tag hcl">HCL</span></div>
+<pre><span class="kw">resource</span> <span class="st">"iosxe_extended_acl"</span> <span class="st">"guest"</span> {
+  name = <span class="st">"GUEST_IN"</span>
+
+  <span class="kw">rules</span> {
+    sequence = <span class="nm">10</span>
+    action   = <span class="st">"permit"</span>
+    protocol = <span class="st">"tcp"</span>
+    source          = <span class="st">"10.30.0.0"</span>
+    source_wildcard = <span class="st">"0.0.255.255"</span>
+    destination_any = <span class="nm">true</span>
+    destination_port_equal = <span class="nm">443</span>
+  }
+  <span class="kw">rules</span> {
+    sequence = <span class="nm">40</span>
+    action   = <span class="st">"permit"</span>
+    protocol = <span class="st">"ip"</span>
+    source_any      = <span class="nm">true</span>
+    destination_any = <span class="nm">true</span>
+  }
+  <span class="c"># ...ACEs 20 and 30 follow the same shape</span>
+}</pre>
+        </div>
+      </div>
+    </div>
+    <div class="note warn">
+      <div class="h">Order still matters</div>
+      <p>An ACL is one of the few network constructs where sequence is semantic — first match wins. Terraform preserves your <code class="k">sequence</code> numbers exactly, so the declarative model doesn't lose the ordering guarantee you rely on. Leave gaps (10, 20, 30) so you can insert later.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. STATE ============ -->
+<section id="state">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">03</div>
+      <div>
+        <h2>State: how Terraform remembers the network</h2>
+        <p class="sec-intro" style="margin-top:12px">Terraform's superpower — knowing the difference between what you want and what's out there — depends entirely on a JSON file called state. Understand this file and everything else clicks.</p>
+      </div>
+    </div>
+
+    <h3>What terraform.tfstate actually holds</h3>
+    <p>State is the map between your resource names and the real objects on the devices. When you write <code class="k">iosxe_vlan.data</code>, state records that this corresponds to VLAN 120 on 192.0.2.10, plus every attribute Terraform last saw. On the next <code class="k">plan</code>, Terraform reads state, reads your files, and diffs the two.</p>
+    <div class="code">
+      <div class="bar"><span class="dot" style="background:#e0574a"></span><span class="dot" style="background:#e7b13f"></span><span class="dot" style="background:#3fb463"></span><span class="fname">terraform.tfstate</span><span class="tag out">JSON — generated</span></div>
+<pre>{
+  <span class="nm">"resources"</span>: [{
+    <span class="nm">"type"</span>: <span class="st">"iosxe_vlan"</span>,
+    <span class="nm">"name"</span>: <span class="st">"data"</span>,
+    <span class="nm">"instances"</span>: [{
+      <span class="nm">"attributes"</span>: {
+        <span class="nm">"id"</span>:      <span class="st">"Cisco-IOS-XE-native:vlan/120"</span>,
+        <span class="nm">"vlan_id"</span>: <span class="nm">120</span>,
+        <span class="nm">"name"</span>:    <span class="st">"USERS_DATA"</span>
+      }
+    }]
+  }]
+}</pre>
+    </div>
+
+    <div class="note warn">
+      <div class="h">Why local state bites teams</div>
+      <p>A <code class="k">terraform.tfstate</code> sitting on your laptop causes three real problems: <strong>no locking</strong> — two engineers apply at once and corrupt it; <strong>drift &amp; divergence</strong> — your teammate's copy doesn't know about your changes; and <strong>secrets in plaintext</strong> — any sensitive attribute a provider returns lands in this file unencrypted. Never commit it to Git.</p>
+    </div>
+
+    <h3>Remote state: the shared source of truth</h3>
+    <p>Move state off the laptop into a shared backend. Now the file lives once, centrally; Terraform locks it during any operation so concurrent applies are impossible; and it's encrypted at rest. This is the single most important step before more than one person touches a project.</p>
+
+    <h4>Option A — S3 with DynamoDB locking</h4>
+    <div class="code">
+      <div class="bar"><span class="dot" style="background:#e0574a"></span><span class="dot" style="background:#e7b13f"></span><span class="dot" style="background:#3fb463"></span><span class="fname">backend.tf</span><span class="tag hcl">HCL</span></div>
+<pre><span class="kw">terraform</span> {
+  <span class="kw">backend</span> <span class="st">"s3"</span> {
+    bucket         = <span class="st">"netops-tfstate"</span>
+    key            = <span class="st">"campus/core-switches.tfstate"</span>
+    region         = <span class="st">"us-east-1"</span>
+    dynamodb_table = <span class="st">"tf-locks"</span>   <span class="c"># state locking</span>
+    encrypt        = <span class="nm">true</span>          <span class="c"># encrypt at rest</span>
+  }
+}</pre>
+    </div>
+
+    <h4>Option B — Terraform Cloud / HCP</h4>
+    <div class="code">
+      <div class="bar"><span class="dot" style="background:#e0574a"></span><span class="dot" style="background:#e7b13f"></span><span class="dot" style="background:#3fb463"></span><span class="fname">backend.tf</span><span class="tag hcl">HCL</span></div>
+<pre><span class="kw">terraform</span> {
+  <span class="kw">cloud</span> {
+    organization = <span class="st">"acme-netops"</span>
+    <span class="kw">workspaces</span> { name = <span class="st">"campus-core"</span> }
+  }
+}</pre>
+    </div>
+    <p>Locking is automatic here, state is encrypted and versioned, and every <code class="k">apply</code> is logged with who ran it and what changed — an audit trail your change-management process will thank you for. Run <code class="k">terraform init</code> after adding a backend to migrate existing state into it.</p>
+
+    <div class="note">
+      <div class="h">The locking analogy</div>
+      <p>A state lock is the config-lock exclusive semaphore you already know from <code class="k">configure exclusive</code> — it stops a second session from making concurrent changes to the same device. Remote state gives that same guarantee across a whole team, automatically.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. VERSUS ============ -->
+<section id="versus">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="sec-num">04</div>
+      <div>
+        <h2>Declarative vs procedural</h2>
+        <p class="sec-intro" style="margin-top:12px">You've now seen both models in the same room. The question isn't which is "better" — it's which fits the job. Here's how they compare on the four axes that decide it: scale, skills, reusability, and speed.</p>
+      </div>
+    </div>
+
+    <p><strong>Procedural</strong> (the IOS CLI, a Netmiko/Python script, an Ansible playbook run imperatively) describes <em>how</em> — an ordered sequence of steps. <strong>Declarative</strong> (Terraform) describes <em>what</em> — the end state — and lets the engine compute the steps. Terraform 1.5 sharpens the declarative edge with <code class="k">import</code> blocks (bring existing devices under management from a file, no manual CLI import) and <code class="k">check</code> blocks (assert post-apply conditions like "the OSPF neighbor is up").</p>
+
+    <table class="tbl">
+      <thead>
+        <tr><th>Axis</th><th>Procedural — CLI / scripts</th><th>Declarative — Terraform</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th data-l="Axis">Scale</th>
+          <td class="pro" data-l="Procedural">Linear effort — 200 switches means running the sequence 200 times and tracking which succeeded.</td>
+          <td class="dec" data-l="Declarative">One config, <code class="k">for_each</code> over an inventory. The graph fans out to 200 devices in parallel from a single apply.</td>
+        </tr>
+        <tr>
+          <th data-l="Axis">Skills</th>
+          <td class="pro" data-l="Procedural">Leans on deep per-platform CLI fluency and scripting to handle idempotency and error paths yourself.</td>
+          <td class="dec" data-l="Declarative">Leans on modeling intent in HCL. The provider handles idempotency, ordering, and retries — less code to babysit.</td>
+        </tr>
+        <tr>
+          <th data-l="Axis">Reusability</th>
+          <td class="pro" data-l="Procedural">Scripts get copy-pasted and forked; drift creeps in between copies over time.</td>
+          <td class="dec" data-l="Declarative">Modules are versioned and parameterized. Define an "access-switch" once, instantiate it everywhere with variables.</td>
+        </tr>
+        <tr>
+          <th data-l="Axis">Speed</th>
+          <td class="pro" data-l="Procedural">Fast to write for a one-off change; slow and risky to safely repeat, review, or roll back at scale.</td>
+          <td class="dec" data-l="Declarative">Upfront modeling cost, then near-instant repeatable changes with a built-in dry-run and clean teardown.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <div class="h">The honest verdict</div>
+      <p>For a single urgent change on one box at 2&nbsp;a.m., the CLI still wins — reach for it. Declarative pays off when a change must be <strong>repeatable, reviewable, and applied across many devices the same way every time</strong>. Most production network estates eventually cross that line, which is why IaC has moved from the server world into the network.</p>
+    </div>
+
+    <h3>Where each one shines</h3>
+    <div class="split">
+      <div class="col net">
+        <div class="lbl"><span class="pip"></span>Reach for procedural when…</div>
+        <div class="code" style="background:var(--net-soft);border-color:#d5ebe9">
+<pre style="color:var(--ink)">• A one-off fix on a single device
+• Interactive troubleshooting &amp; show cmds
+• Steps genuinely must run in a fixed
+  order with side effects
+• No shared team ownership of the config</pre>
+        </div>
+      </div>
+      <div class="col tf">
+        <div class="lbl"><span class="pip"></span>Reach for declarative when…</div>
+        <div class="code" style="background:var(--accent-soft);border-color:#e2dbfa">
+<pre style="color:var(--ink)">• The same change hits many devices
+• You want a dry-run before every commit
+• Config should live in Git, peer-reviewed
+• You need clean, ordered teardown
+• Drift detection matters to compliance</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>Terraform for network engineers · a CCNP-level primer</div>
+    <div>Examples target <code>cisco/iosxe</code> · adaptable to <code>meraki</code> &amp; <code>aci</code> · Terraform&nbsp;v1.5+</div>
+  </div>
+</footer>
+
+</body>
+</html>
